@@ -23,7 +23,6 @@
             background-size: 100% 3rem;
             line-height: 3rem;
         }
-        /* Prevents pull-to-refresh on mobile */
         body { overscroll-behavior-y: contain; }
     </style>
 </head>
@@ -33,6 +32,7 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
         
+        // Robust Icon Component for Browser Mode
         const Icon = ({ name, className = "w-6 h-6" }) => {
             const iconRef = useRef(null);
             useEffect(() => {
@@ -81,7 +81,6 @@
                 { symbol: '$', name: 'USD' }, { symbol: '£', name: 'GBP' },
                 { symbol: '€', name: 'EUR' }, { symbol: '₹', name: 'INR' },
                 { symbol: '¥', name: 'JPY' }, { symbol: '₩', name: 'KRW' },
-                { symbol: 'A$', name: 'AUD' }, { symbol: 'C$', name: 'CAD' },
             ];
 
             useEffect(() => {
@@ -91,6 +90,24 @@
             useEffect(() => {
                 localStorage.setItem('student_currency', currency);
             }, [currency]);
+
+            // Restoration of Export Functionality
+            const exportData = () => {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(expenses, null, 2));
+                const downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", `memos_backup_${todayStr}.json`);
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
+            };
+
+            const clearAllData = () => {
+                if (window.confirm("Are you sure? This will delete all your memos permanently.")) {
+                    setExpenses({});
+                    setShowSettings(false);
+                }
+            };
 
             const handleAddClick = () => {
                 setIsAdding(true);
@@ -138,14 +155,12 @@
                 const sortedDates = Object.keys(expenses).sort().reverse();
                 const currentMonthDates = sortedDates.filter(d => d.startsWith(currentMonthStr));
                 const olderDates = sortedDates.filter(d => !d.startsWith(currentMonthStr));
-                
                 const olderGroups = olderDates.reduce((acc, date) => {
                     const month = date.substring(0, 7);
                     if (!acc[month]) acc[month] = [];
                     acc[month].push(date);
                     return acc;
                 }, {});
-                
                 return { currentMonthDates, olderGroups };
             }, [expenses, currentMonthStr]);
 
@@ -169,6 +184,7 @@
 
             return (
                 <div className="max-w-md mx-auto min-h-screen bg-[#fffdf5] font-sans text-gray-900 shadow-xl overflow-x-hidden relative">
+                    {/* Updated Settings with Export */}
                     {showSettings && (
                         <div className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm flex items-center justify-center p-6">
                             <div className="bg-white w-full max-w-xs rounded-3xl shadow-2xl overflow-hidden">
@@ -176,18 +192,28 @@
                                     <h3 className="font-handwriting text-2xl font-bold text-gray-800">Settings</h3>
                                     <button onClick={() => setShowSettings(false)} className="text-gray-400"><Icon name="X" /></button>
                                 </div>
-                                <div className="p-6 space-y-8">
+                                <div className="p-6 space-y-6">
                                     <div>
-                                        <label className="text-xs font-bold text-gray-400 uppercase block mb-3">Currency</label>
-                                        <div className="grid grid-cols-4 gap-2">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-3">Currency</label>
+                                        <div className="grid grid-cols-3 gap-2">
                                             {currencies.map((curr) => (
                                                 <button key={curr.symbol} onClick={() => setCurrency(curr.symbol)} className={`h-10 rounded-xl font-handwriting text-lg border-2 ${currency === curr.symbol ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-gray-100 text-gray-400'}`}>{curr.symbol}</button>
                                             ))}
                                         </div>
                                     </div>
+                                    <div className="pt-4 border-t border-gray-100 space-y-3">
+                                        <button onClick={exportData} className="w-full flex items-center justify-between p-3 bg-blue-50 text-blue-700 rounded-xl font-bold text-sm">
+                                            <span>Export Backup (.json)</span>
+                                            <Icon name="Download" className="w-4 h-4" />
+                                        </button>
+                                        <button onClick={clearAllData} className="w-full flex items-center justify-between p-3 bg-red-50 text-red-600 rounded-xl font-bold text-sm">
+                                            <span>Clear All Records</span>
+                                            <Icon name="Trash2" className="w-4 h-4" />
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className="p-4 bg-gray-50 text-center">
-                                    <button onClick={() => setShowSettings(false)} className="font-handwriting text-amber-600 text-lg font-bold">Close</button>
+                                    <button onClick={() => setShowSettings(false)} className="font-handwriting text-amber-600 text-lg font-bold">Back to Memos</button>
                                 </div>
                             </div>
                         </div>
@@ -260,29 +286,23 @@
                         )}
                         {view === 'history' && (
                             <div className="p-6 space-y-10">
-                                {/* Current Month Section */}
                                 <div>
                                     <h3 className="font-handwriting text-xl text-amber-600 mb-4 border-b border-amber-100 flex items-center gap-2">
                                         <Icon name="Calendar" className="w-5 h-5" /> This Month
                                     </h3>
                                     <div className="grid gap-4">
-                                        {historyGroups.currentMonthDates.length > 0 ? (
-                                            historyGroups.currentMonthDates.map(date => (
-                                                <div key={date} onClick={() => { setSelectedDate(date); setView('today'); }} className="bg-[#fef3c7] shadow-md p-4 rotate-1 border-b-2 border-r-2 border-amber-200 cursor-pointer active:scale-95">
-                                                    <p className="font-handwriting text-gray-500 text-sm">{new Date(date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
-                                                    <div className="flex justify-between items-center mt-1">
-                                                        <span className="font-handwriting text-lg font-bold text-gray-700">{(expenses[date] || []).length} items</span>
-                                                        <span className="font-handwriting text-xl text-amber-600 font-bold">{currency}{getTotalForDate(date).toFixed(2)}</span>
-                                                    </div>
+                                        {historyGroups.currentMonthDates.map(date => (
+                                            <div key={date} onClick={() => { setSelectedDate(date); setView('today'); }} className="bg-[#fef3c7] shadow-md p-4 rotate-1 border-b-2 border-r-2 border-amber-200 cursor-pointer active:scale-95">
+                                                <p className="font-handwriting text-gray-500 text-sm">{new Date(date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
+                                                <div className="flex justify-between items-center mt-1">
+                                                    <span className="font-handwriting text-lg font-bold text-gray-700">{(expenses[date] || []).length} items</span>
+                                                    <span className="font-handwriting text-xl text-amber-600 font-bold">{currency}{getTotalForDate(date).toFixed(2)}</span>
                                                 </div>
-                                            ))
-                                        ) : (
-                                            <p className="text-gray-400 font-handwriting">No entries yet this month.</p>
-                                        )}
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
 
-                                {/* Archived Sections */}
                                 {Object.keys(historyGroups.olderGroups).length > 0 && (
                                     <div className="pt-4">
                                         <h3 className="font-handwriting text-xl text-gray-400 mb-4 flex items-center gap-2 italic">
@@ -293,23 +313,18 @@
                                                 const isExpanded = expandedMonth === month;
                                                 const monthTotal = dates.reduce((sum, d) => sum + getTotalForDate(d), 0);
                                                 const monthLabel = new Date(month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                                                
                                                 return (
                                                     <div key={month} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-                                                        <button 
-                                                            onClick={() => setExpandedMonth(isExpanded ? null : month)}
-                                                            className="w-full flex justify-between items-center p-4 text-left"
-                                                        >
+                                                        <button onClick={() => setExpandedMonth(isExpanded ? null : month)} className="w-full flex justify-between items-center p-4">
                                                             <div>
                                                                 <span className="font-handwriting text-lg text-gray-700">{monthLabel}</span>
                                                                 <span className="ml-3 text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-bold">{dates.length} days</span>
                                                             </div>
                                                             <div className="flex items-center gap-3">
                                                                 <span className="font-handwriting font-bold text-gray-400">{currency}{monthTotal.toFixed(2)}</span>
-                                                                <Icon name={isExpanded ? "ChevronUp" : "ChevronDown"} className="w-5 h-5 text-gray-300" />
+                                                                <Icon name={isExpanded ? "ChevronUp" : "ChevronDown"} className="w-4 h-4 text-gray-300" />
                                                             </div>
                                                         </button>
-                                                        
                                                         {isExpanded && (
                                                             <div className="bg-gray-50 p-3 grid gap-2 border-t border-gray-50">
                                                                 {dates.map(date => (
@@ -331,7 +346,7 @@
                         {view === 'stats' && (
                             <div className="p-6">
                                 <h2 className="font-handwriting text-2xl mb-6">Analysis</h2>
-                                {Object.entries(Object.keys(expenses).reduce((acc, d) => { const m = d.substring(0,7); acc[m] = (acc[m]||0) + getTotalForDate(d); return acc; }, {})).map(([month, total]) => (
+                                {Object.entries(Object.keys(expenses).reduce((acc, d) => { const m = d.substring(0,7); acc[m] = (acc[m]||0) + getTotalForDate(d); return acc; }, {})).sort().reverse().map(([month, total]) => (
                                     <div key={month} className="border-l-4 border-amber-400 pl-4 py-2 mb-4 bg-white/40">
                                         <p className="text-gray-400 text-xs uppercase font-bold">{new Date(month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
                                         <p className="font-handwriting text-3xl text-gray-800 font-bold">{currency}{total.toFixed(2)}</p>
@@ -342,9 +357,9 @@
                     </main>
 
                     <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/80 backdrop-blur-md border-t border-gray-100 flex justify-around p-4 z-10">
-                        <button onClick={() => { setSelectedDate(todayStr); setView('today'); }} className={`flex flex-col items-center gap-1 ${view === 'today' ? 'text-amber-600' : 'text-gray-400'}`}><Icon name="Plus" /><span className="text-[10px] font-bold">Write</span></button>
-                        <button onClick={() => setView('history')} className={`flex flex-col items-center gap-1 ${view === 'history' ? 'text-amber-600' : 'text-gray-400'}`}><Icon name="Calendar" /><span className="text-[10px] font-bold">Journal</span></button>
-                        <button onClick={() => setView('stats')} className={`flex flex-col items-center gap-1 ${view === 'stats' ? 'text-amber-600' : 'text-gray-400'}`}><Icon name="BarChart3" /><span className="text-[10px] font-bold">Stats</span></button>
+                        <button onClick={() => { setSelectedDate(todayStr); setView('today'); }} className={`flex flex-col items-center gap-1 ${view === 'today' ? 'text-amber-600' : 'text-gray-400'}`}><Icon name="Plus" /><span className="text-[10px] font-bold uppercase tracking-wider">Write</span></button>
+                        <button onClick={() => setView('history')} className={`flex flex-col items-center gap-1 ${view === 'history' ? 'text-amber-600' : 'text-gray-400'}`}><Icon name="Calendar" /><span className="text-[10px] font-bold uppercase tracking-wider">Journal</span></button>
+                        <button onClick={() => setView('stats')} className={`flex flex-col items-center gap-1 ${view === 'stats' ? 'text-amber-600' : 'text-gray-400'}`}><Icon name="BarChart3" /><span className="text-[10px] font-bold uppercase tracking-wider">Stats</span></button>
                     </nav>
                 </div>
             );
