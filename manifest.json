@@ -1,0 +1,20 @@
+{
+  "name": "My Spending Memos",
+  "short_name": "Spending Memos",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#fffdf5",
+  "theme_color": "#f59e0b",
+  "icons": [
+    {
+      "src": "msm_icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "msm_icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
