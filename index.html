@@ -1,0 +1,502 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { 
+  Calendar as CalendarIcon, 
+  BarChart3, 
+  ChevronLeft, 
+  Trash2, 
+  Bell,
+  Check,
+  Plus,
+  Settings,
+  Download,
+  X,
+  ChevronRight,
+  Folder
+} from 'lucide-react';
+
+const App = () => {
+  // --- State ---
+  const [view, setView] = useState('today'); 
+  const [expenses, setExpenses] = useState(() => {
+    const saved = localStorage.getItem('student_expenses_v2');
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [currency, setCurrency] = useState(() => {
+    return localStorage.getItem('student_currency') || '$';
+  });
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [expandedMonth, setExpandedMonth] = useState(null);
+  
+  // Inline entry state
+  const [isAdding, setIsAdding] = useState(false);
+  const [step, setStep] = useState('name'); // 'name' or 'price'
+  const [tempName, setTempName] = useState('');
+  const [tempPrice, setTempPrice] = useState('');
+
+  // Editing state
+  const [editingId, setEditingId] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  
+  const [notificationStatus, setNotificationStatus] = useState(Notification.permission);
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const currentMonthStr = todayStr.substring(0, 7); // YYYY-MM
+
+  const currencies = [
+    { symbol: '$', name: 'USD / Dollar' },
+    { symbol: '£', name: 'GBP / Pound' },
+    { symbol: '€', name: 'EUR / Euro' },
+    { symbol: '₹', name: 'INR / Rupee' },
+    { symbol: '¥', name: 'JPY / Yen' },
+    { symbol: '₩', name: 'KRW / Won' },
+    { symbol: 'A$', name: 'AUD / Australian Dollar' },
+    { symbol: 'C$', name: 'CAD / Canadian Dollar' },
+  ];
+
+  useEffect(() => {
+    localStorage.setItem('student_expenses_v2', JSON.stringify(expenses));
+  }, [expenses]);
+
+  useEffect(() => {
+    localStorage.setItem('student_currency', currency);
+  }, [currency]);
+
+  // Notifications logic
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date();
+      if (now.getHours() === 21 && now.getMinutes() === 0 && Notification.permission === 'granted') {
+        new Notification("Daily Memo", { body: "Time to write down today's expenses!" });
+      }
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleAddClick = () => {
+    setIsAdding(true);
+    setStep('name');
+    setEditingId(null);
+  };
+
+  const submitName = (e) => {
+    if (e.key === 'Enter' && tempName.trim()) {
+      setStep('price');
+    }
+  };
+
+  const submitPrice = (e) => {
+    if (e.key === 'Enter' && tempPrice) {
+      const newEntry = {
+        id: Date.now(),
+        name: tempName,
+        price: parseFloat(tempPrice) || 0
+      };
+      setExpenses(prev => ({
+        ...prev,
+        [selectedDate]: [...(prev[selectedDate] || []), newEntry]
+      }));
+      setTempName('');
+      setTempPrice('');
+      setIsAdding(false);
+      setStep('name');
+    }
+  };
+
+  const startEditing = (item) => {
+    setEditingId(item.id);
+    setEditName(item.name);
+    setEditPrice(item.price.toString());
+    setIsAdding(false);
+  };
+
+  const saveEdit = () => {
+    if (!editName.trim()) return;
+    setExpenses(prev => ({
+      ...prev,
+      [selectedDate]: prev[selectedDate].map(item => 
+        item.id === editingId 
+        ? { ...item, name: editName, price: parseFloat(editPrice) || 0 } 
+        : item
+      )
+    }));
+    setEditingId(null);
+  };
+
+  const deleteExpense = (id) => {
+    setExpenses(prev => ({
+      ...prev,
+      [selectedDate]: prev[selectedDate].filter(item => item.id !== id)
+    }));
+  };
+
+  const getTotalForDate = (date) => {
+    return (expenses[date] || []).reduce((sum, item) => sum + item.price, 0);
+  };
+
+  const exportData = () => {
+    const dataStr = JSON.stringify(expenses, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    const exportFileDefaultName = `my-spending-memos-backup-${new Date().toISOString().split('T')[0]}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+  };
+
+  // Grouping logic for History
+  const historyGroups = useMemo(() => {
+    const sortedDates = Object.keys(expenses).sort().reverse();
+    const currentMonthDates = sortedDates.filter(d => d.startsWith(currentMonthStr));
+    const olderDates = sortedDates.filter(d => !d.startsWith(currentMonthStr));
+    
+    const olderGroups = olderDates.reduce((acc, date) => {
+      const month = date.substring(0, 7);
+      if (!acc[month]) acc[month] = [];
+      acc[month].push(date);
+      return acc;
+    }, {});
+
+    return { currentMonthDates, olderGroups };
+  }, [expenses, currentMonthStr]);
+
+  // --- UI Components ---
+
+  const StickyNote = ({ children, className = "", onClick }) => (
+    <div 
+      onClick={onClick}
+      className={`bg-[#fef3c7] shadow-md p-4 rotate-1 border-b-2 border-r-2 border-amber-200 cursor-pointer active:scale-95 transition-transform ${className}`}
+    >
+      {children}
+    </div>
+  );
+
+  const Header = ({ title, showBack = false }) => (
+    <div className="flex items-center justify-between p-6 bg-[#fffdf5] border-b border-gray-200 sticky top-0 z-20">
+      <div className="flex items-center gap-3">
+        {showBack && (
+          <button onClick={() => setView('today')} className="p-1">
+            <ChevronLeft className="w-6 h-6 text-gray-600" />
+          </button>
+        )}
+        <h1 className="text-2xl font-handwriting font-bold text-gray-800 tracking-tight">{title}</h1>
+      </div>
+      <div className="flex gap-4">
+        <button onClick={() => setView('stats')} className={view === 'stats' ? 'text-amber-600' : 'text-gray-400'}>
+          <BarChart3 className="w-6 h-6" />
+        </button>
+        <button onClick={() => setView('history')} className={view === 'history' ? 'text-amber-600' : 'text-gray-400'}>
+          <CalendarIcon className="w-6 h-6" />
+        </button>
+        <button onClick={() => setShowSettings(true)} className="text-gray-400">
+          <Settings className="w-6 h-6" />
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="max-w-md mx-auto min-h-screen bg-[#fffdf5] font-sans text-gray-900 shadow-xl selection:bg-amber-200 overflow-x-hidden relative">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap');
+        .font-handwriting { font-family: 'Kalam', cursive; }
+        .lined-paper {
+          background-image: linear-gradient(#e5e7eb 1px, transparent 1px);
+          background-size: 100% 3rem;
+          line-height: 3rem;
+        }
+      `}</style>
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-xs rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="bg-amber-50 p-6 flex justify-between items-center border-b border-amber-100">
+              <h3 className="font-handwriting text-2xl font-bold text-gray-800">Settings</h3>
+              <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-8">
+              <div>
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block mb-3">Currency</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {currencies.map((curr) => (
+                    <button
+                      key={curr.symbol}
+                      onClick={() => setCurrency(curr.symbol)}
+                      className={`h-10 rounded-xl font-handwriting text-lg border-2 transition-all ${
+                        currency === curr.symbol 
+                        ? 'border-amber-400 bg-amber-50 text-amber-700' 
+                        : 'border-gray-100 text-gray-400 hover:border-gray-200'
+                      }`}
+                    >
+                      {curr.symbol}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block mb-3">Backup</label>
+                <button 
+                  onClick={exportData}
+                  className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-black transition-colors"
+                >
+                  <Download className="w-5 h-5" /> Export JSON
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-4 bg-gray-50 text-center">
+              <button onClick={() => setShowSettings(false)} className="font-handwriting text-amber-600 text-lg font-bold">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {view === 'today' && <Header title="My Spending Memos" />}
+      {view === 'history' && <Header title="Journal History" showBack />}
+      {view === 'stats' && <Header title="Spending Stats" showBack />}
+
+      <main className="pb-32">
+        {view === 'today' && (
+          <div className="p-6">
+            <div className="flex justify-between items-end mb-8">
+              <div>
+                <h2 className="text-3xl font-handwriting text-gray-800">
+                  {selectedDate === todayStr ? "Today's Notes" : new Date(selectedDate).toLocaleDateString()}
+                </h2>
+                <div className="h-1 w-20 bg-amber-400 rounded-full mt-1"></div>
+              </div>
+              <div className="text-right">
+                <span className="text-xs font-bold text-gray-400 uppercase block">Total</span>
+                <span className="text-2xl font-handwriting font-bold text-amber-600">{currency}{getTotalForDate(selectedDate).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div className="lined-paper min-h-[400px]">
+              {(expenses[selectedDate] || []).map((item, idx) => (
+                <div key={item.id} className="flex justify-between items-center border-b border-gray-100 px-2 h-[3rem]">
+                  {editingId === item.id ? (
+                    <div className="flex items-center gap-2 flex-1 h-full py-1">
+                      <input 
+                        autoFocus
+                        className="bg-amber-50 font-handwriting text-xl outline-none text-gray-700 w-1/2 px-1 rounded h-full" 
+                        value={editName} 
+                        onChange={(e) => setEditName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && saveEdit()}
+                      />
+                      <div className="flex items-center">
+                        <span className="font-handwriting text-xl text-amber-600 mr-1">{currency}</span>
+                        <input 
+                          type="number"
+                          className="bg-amber-50 font-handwriting text-xl outline-none text-amber-600 w-20 px-1 rounded h-full" 
+                          value={editPrice} 
+                          onChange={(e) => setEditPrice(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && saveEdit()}
+                        />
+                      </div>
+                      <button onClick={saveEdit} className="text-green-500 p-1">
+                        <Check className="w-5 h-5" />
+                      </button>
+                      <button onClick={() => setEditingId(null)} className="text-gray-300 p-1">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-4 truncate cursor-pointer flex-1 h-full" onClick={() => startEditing(item)}>
+                        <span className="text-gray-400 font-handwriting text-xl">{idx + 1}.</span>
+                        <span className="font-handwriting text-xl text-gray-700 truncate">{item.name}</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="font-handwriting text-xl text-gray-900 font-bold cursor-pointer" onClick={() => startEditing(item)}>
+                          {currency}{item.price.toFixed(2)}
+                        </span>
+                        <button onClick={() => deleteExpense(item.id)} className="text-red-300 hover:text-red-500 transition-colors p-1">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+
+              {!isAdding ? (
+                <div className="h-[3rem] flex items-center px-2">
+                  <button onClick={handleAddClick} className="flex items-center gap-2 text-amber-500 hover:text-amber-600 font-handwriting text-xl transition-all">
+                    <Plus className="w-5 h-5" /> <span>Add entry...</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="h-[3rem] flex justify-between items-center px-2 bg-amber-50/50">
+                  <div className="flex items-center gap-4 flex-1">
+                    <span className="text-amber-400 font-handwriting text-xl">{(expenses[selectedDate]?.length || 0) + 1}.</span>
+                    {step === 'name' ? (
+                      <input autoFocus className="bg-transparent font-handwriting text-xl outline-none text-gray-700 w-full placeholder:text-gray-300" placeholder="Type name..." value={tempName} onChange={(e) => setTempName(e.target.value)} onKeyDown={submitName} />
+                    ) : (
+                      <div className="flex items-center gap-4 w-full">
+                        <span className="font-handwriting text-xl text-gray-700" onClick={() => setStep('name')}>{tempName}</span>
+                        <div className="flex items-center">
+                          <span className="font-handwriting text-xl text-amber-600 mr-1">{currency}</span>
+                          <input autoFocus type="number" className="bg-transparent font-handwriting text-xl outline-none text-amber-600 w-24 border-b border-amber-300" placeholder="0.00" value={tempPrice} onChange={(e) => setTempPrice(e.target.value)} onKeyDown={submitPrice} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {step === 'price' && (
+                      <button onClick={() => submitPrice({key: 'Enter'})} className="text-green-500">
+                        <Check className="w-6 h-6" />
+                      </button>
+                    )}
+                    <button onClick={() => setIsAdding(false)} className="text-gray-300">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {notificationStatus !== 'granted' && (
+              <div className="mt-12">
+                <StickyNote className="max-w-[200px] mx-auto">
+                  <div className="flex flex-col items-center text-center gap-2">
+                    <Bell className="w-6 h-6 text-amber-600" />
+                    <p className="font-handwriting text-lg leading-tight text-gray-800">Enable 9pm reminder?</p>
+                    <button onClick={() => Notification.requestPermission().then(setNotificationStatus)} className="bg-amber-400 text-white px-4 py-1 rounded shadow-sm text-sm font-bold uppercase tracking-widest mt-2">Yes</button>
+                  </div>
+                </StickyNote>
+              </div>
+            )}
+          </div>
+        )}
+
+        {view === 'history' && (
+          <div className="p-6">
+            <div className="mb-10">
+              <h3 className="font-handwriting text-xl text-amber-600 mb-4 border-b border-amber-100 flex items-center gap-2">
+                <CalendarIcon className="w-5 h-5" /> This Month
+              </h3>
+              <div className="grid gap-4">
+                {historyGroups.currentMonthDates.length === 0 && <p className="font-handwriting text-gray-400 italic px-2">No entries this month yet.</p>}
+                {historyGroups.currentMonthDates.map(date => {
+                  const count = (expenses[date] || []).length;
+                  return (
+                    <StickyNote key={date} onClick={() => { setSelectedDate(date); setView('today'); }} className={date === todayStr ? "bg-amber-100" : ""}>
+                      <p className="font-handwriting text-gray-500 text-sm">{new Date(date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
+                      <div className="flex justify-between items-center mt-1">
+                        <span className="font-handwriting text-lg font-bold text-gray-700">
+                          {count} {count === 1 ? 'item' : 'items'}
+                        </span>
+                        <span className="font-handwriting text-xl text-amber-600 font-bold">{currency}{getTotalForDate(date).toFixed(2)}</span>
+                      </div>
+                    </StickyNote>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-handwriting text-xl text-gray-400 mb-4 border-b border-gray-100 flex items-center gap-2">
+                <Folder className="w-5 h-5" /> Older Archives
+              </h3>
+              <div className="space-y-4">
+                {Object.keys(historyGroups.olderGroups).length === 0 && <p className="font-handwriting text-gray-400 italic px-2">No older archives found.</p>}
+                {Object.entries(historyGroups.olderGroups).sort().reverse().map(([month, dates]) => {
+                  const isExpanded = expandedMonth === month;
+                  const monthTotal = dates.reduce((sum, d) => sum + getTotalForDate(d), 0);
+                  const monthLabel = new Date(month + "-01").toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+                  return (
+                    <div key={month} className="bg-white/50 border border-gray-100 rounded-2xl overflow-hidden transition-all">
+                      <button 
+                        onClick={() => setExpandedMonth(isExpanded ? null : month)}
+                        className="w-full p-4 flex justify-between items-center hover:bg-white"
+                      >
+                        <div className="flex items-center gap-3 text-left">
+                          <div className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                            <ChevronRight className="w-5 h-5 text-gray-300" />
+                          </div>
+                          <div>
+                            <p className="font-handwriting text-lg font-bold text-gray-700">{monthLabel}</p>
+                            <p className="text-[10px] uppercase font-bold text-gray-300 tracking-wider">{dates.length} days recorded</p>
+                          </div>
+                        </div>
+                        <p className="font-handwriting text-lg text-gray-400 font-bold">{currency}{monthTotal.toFixed(2)}</p>
+                      </button>
+                      
+                      {isExpanded && (
+                        <div className="p-4 pt-0 grid gap-3 animate-in slide-in-from-top-2 duration-200">
+                          {dates.map(date => (
+                            <div 
+                              key={date} 
+                              onClick={() => { setSelectedDate(date); setView('today'); }}
+                              className="bg-amber-50/50 p-3 rounded-xl flex justify-between items-center cursor-pointer active:scale-[0.98] transition-all"
+                            >
+                              <span className="font-handwriting text-gray-600">{new Date(date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}</span>
+                              <span className="font-handwriting font-bold text-gray-400">{currency}{getTotalForDate(date).toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {view === 'stats' && (
+          <div className="p-6">
+            <h2 className="font-handwriting text-2xl mb-6">Spending Analysis</h2>
+            <div className="space-y-4">
+              {Object.entries(
+                Object.keys(expenses).reduce((acc, date) => {
+                  const m = date.substring(0, 7);
+                  acc[m] = (acc[m] || 0) + getTotalForDate(date);
+                  return acc;
+                }, {})
+              ).length === 0 && <p className="text-gray-400 font-handwriting">Start adding expenses to see stats.</p>}
+              {Object.entries(
+                Object.keys(expenses).reduce((acc, date) => {
+                  const m = date.substring(0, 7);
+                  acc[m] = (acc[m] || 0) + getTotalForDate(date);
+                  return acc;
+                }, {})
+              ).sort().reverse().map(([month, total]) => (
+                <div key={month} className="border-l-4 border-amber-400 pl-4 py-2 bg-white/40 rounded-r-xl">
+                  <p className="text-gray-400 text-xs uppercase font-bold">{new Date(month + "-01").toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+                  <p className="font-handwriting text-3xl text-gray-800 font-bold">{currency}{total.toFixed(2)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Navigation */}
+      <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/80 backdrop-blur-md border-t border-gray-100 flex justify-around p-4 z-10">
+        <button onClick={() => { setSelectedDate(todayStr); setView('today'); }} className={`flex flex-col items-center gap-1 ${view === 'today' ? 'text-amber-600' : 'text-gray-400'}`}>
+          <Plus className="w-6 h-6" />
+          <span className="text-[10px] font-bold uppercase">Write</span>
+        </button>
+        <button onClick={() => setView('history')} className={`flex flex-col items-center gap-1 ${view === 'history' ? 'text-amber-600' : 'text-gray-400'}`}>
+          <CalendarIcon className="w-6 h-6" />
+          <span className="text-[10px] font-bold uppercase">Journal</span>
+        </button>
+        <button onClick={() => setView('stats')} className={`flex flex-col items-center gap-1 ${view === 'stats' ? 'text-amber-600' : 'text-gray-400'}`}>
+          <BarChart3 className="w-6 h-6" />
+          <span className="text-[10px] font-bold uppercase">Stats</span>
+        </button>
+      </nav>
+    </div>
+  );
+};
+
+export default App;
